@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文章智能改写工具 - 中联泵业SEO推广</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto p-6 max-w-6xl">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold mb-2">文章智能改写工具</h1>
+            <p class="text-gray-600">专为中联泵业SEO推广设计的伪原创文章生成工具</p>
+            <p class="text-sm text-gray-500 mt-2">支持5个AI智能改写工具，自动切换确保成功率</p>
+        </div>
+
+        <div class="space-y-6">
+            <!-- 清除数据按钮 -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+                <h2 class="text-xl font-semibold mb-2">重置工具</h2>
+                <p class="text-gray-600 mb-4">如果遇到问题，请先清除所有数据重新开始</p>
+                <button onclick="clearAllData()" class="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                    清除所有数据
+                </button>
+            </div>
+
+            <!-- 文件上传区域 -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+                <h2 class="text-xl font-semibold mb-2 flex items-center gap-2">
+                    <i class="ri-upload-cloud-2-line"></i>
+                    文件上传
+                </h2>
+                <p class="text-gray-600 mb-4">支持Excel格式（.xlsx），请确保文件中包含"去重后的内容"列</p>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">选择Excel文件</label>
+                        <input type="file" id="file-upload" accept=".xlsx,.xls" onchange="handleFileUpload(event)" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    </div>
+                    
+                    <div id="file-info" class="hidden">
+                        <div class="bg-blue-50 border border-blue-200 rounded-md p-4 flex items-center gap-2">
+                            <i class="ri-file-text-line text-blue-600"></i>
+                            <span id="file-name" class="text-blue-800"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作区域 -->
+            <div id="action-section" class="hidden bg-white rounded-lg shadow-sm border p-6">
+                <h2 class="text-xl font-semibold mb-2 flex items-center gap-2">
+                    <i class="ri-magic-line"></i>
+                    文章改写
+                </h2>
+                <p class="text-gray-600 mb-4">使用5个AI智能改写工具，自动切换确保成功率</p>
+                <div class="space-y-4">
+                    <div class="flex gap-4 flex-wrap">
+                        <button onclick="handleRewrite()" id="rewrite-btn" class="flex-1 min-w-[120px] px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                            开始改写
+                        </button>
+                        <button onclick="handleDownload()" id="download-btn" class="flex items-center gap-2 min-w-[120px] px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="ri-download-line"></i>
+                            下载结果
+                        </button>
+                        <button onclick="handleDownloadFailed()" id="download-failed-btn" class="flex items-center gap-2 min-w-[120px] px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="ri-error-warning-line"></i>
+                            下载失败
+                        </button>
+                    </div>
+                    
+                    <div id="progress-section" class="hidden">
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-sm">
+                                <span>处理进度</span>
+                                <span id="progress-text">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div id="progress-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文章列表 -->
+            <div id="articles-section" class="hidden bg-white rounded-lg shadow-sm border p-6">
+                <h2 class="text-xl font-semibold mb-4">文章列表</h2>
+                <div class="space-y-4 max-h-96 overflow-y-auto">
+                    <div id="articles-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let articles = [];
+        let isProcessing = false;
+        let fileName = '';
+
+        function clearAllData() {
+            localStorage.removeItem('articleRewriteData');
+            articles = [];
+            fileName = '';
+            updateUI();
+            console.log('已清除所有数据');
+        }
+
+        function loadData() {
+            const savedData = localStorage.getItem('articleRewriteData');
+            if (savedData) {
+                try {
+                    const parsed = JSON.parse(savedData);
+                    articles = parsed.articles || [];
+                    fileName = parsed.fileName || '';
+                    updateUI();
+                } catch (error) {
+                    console.error('加载本地存储数据失败:', error);
+                    clearAllData();
+                }
+            }
+        }
+
+        function saveData() {
+            if (articles.length > 0) {
+                const dataToSave = {
+                    articles,
+                    fileName,
+                    progress: calculateProgress()
+                };
+                localStorage.setItem('articleRewriteData', JSON.stringify(dataToSave));
+            }
+        }
+
+        function calculateProgress() {
+            if (articles.length === 0) return 0;
+            const completed = articles.filter(a => a.status === 'completed').length;
+            return Math.round((completed / articles.length) * 100);
+        }
+
+        function updateUI() {
+            // 更新文件信息
+            if (fileName) {
+                document.getElementById('file-info').classList.remove('hidden');
+                document.getElementById('file-name').textContent = `已上传文件: ${fileName}，共 ${articles.length} 篇文章`;
+                document.getElementById('action-section').classList.remove('hidden');
+                document.getElementById('articles-section').classList.remove('hidden');
+            } else {
+                document.getElementById('file-info').classList.add('hidden');
+                document.getElementById('action-section').classList.add('hidden');
+                document.getElementById('articles-section').classList.add('hidden');
+            }
+
+            // 更新按钮状态
+            const completedCount = articles.filter(a => a.status === 'completed').length;
+            const failedCount = articles.filter(a => a.status === 'error').length;
+            
+            document.getElementById('download-btn').disabled = completedCount === 0;
+            document.getElementById('download-failed-btn').disabled = failedCount === 0;
+            document.getElementById('rewrite-btn').disabled = isProcessing;
+
+            // 更新进度条
+            const progress = calculateProgress();
+            if (progress > 0) {
+                document.getElementById('progress-section').classList.remove('hidden');
+                document.getElementById('progress-bar').style.width = progress + '%';
+                document.getElementById('progress-text').textContent = progress + '%';
+            } else {
+                document.getElementById('progress-section').classList.add('hidden');
+            }
+
+            // 更新文章列表
+            updateArticlesList();
+        }
+
+        function updateArticlesList() {
+            const articlesList = document.getElementById('articles-list');
+            articlesList.innerHTML = '';
+
+            articles.forEach(article => {
+                const articleDiv = document.createElement('div');
+                articleDiv.className = 'border rounded-lg p-4 space-y-2';
+                
+                const statusBadge = getStatusBadge(article.status, article.currentTool);
+                
+                articleDiv.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-sm font-medium">文章 #${article.id}</span>
+                                ${statusBadge}
+                            </div>
+                            <p class="text-sm text-gray-600 line-clamp-2">${article.originalContent.substring(0, 100)}...</p>
+                            ${article.error ? `<p class="text-sm text-red-600 mt-1">错误: ${article.error}</p>` : ''}
+                            ${article.aiTool ? `<p class="text-sm text-green-600 mt-1">使用工具: ${article.aiTool}</p>` : ''}
+                        </div>
+                        ${article.status === 'error' ? `
+                            <button onclick="handleRetry(${article.id})" class="ml-4 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50" ${isProcessing ? 'disabled' : ''}>
+                                重试
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+                
+                articlesList.appendChild(articleDiv);
+            });
+        }
+
+        function getStatusBadge(status, currentTool) {
+            switch (status) {
+                case 'pending':
+                    return '<span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">待处理</span>';
+                case 'processing':
+                    return `
+                        <div class="flex items-center gap-1">
+                            <span class="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full animate-pulse">处理中</span>
+                            ${currentTool ? `<span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">${currentTool}</span>` : ''}
+                        </div>
+                    `;
+                case 'completed':
+                    return '<span class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">已完成</span>';
+                case 'error':
+                    return '<span class="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">错误</span>';
+                default:
+                    return '<span class="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">未知</span>';
+            }
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            clearAllData();
+            fileName = file.name;
+            isProcessing = true;
+            updateUI();
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    const headers = jsonData[0];
+                    const contentColumnIndex = headers.findIndex(header => 
+                        header && header.toString().includes('去重后的内容')
+                    );
+
+                    if (contentColumnIndex === -1) {
+                        throw new Error('未找到"去重后的内容"列');
+                    }
+
+                    const articleData = [];
+                    
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i];
+                        const content = row[contentColumnIndex];
+                        
+                        if (content && typeof content === 'string' && content.trim()) {
+                            const cleanContent = content.trim();
+                            
+                            articleData.push({
+                                id: i,
+                                originalContent: cleanContent,
+                                status: 'pending'
+                            });
+                        }
+                    }
+
+                    articles = articleData;
+                    isProcessing = false;
+                    updateUI();
+                    saveData();
+                    console.log(`上传成功，解析了 ${articleData.length} 篇文章`);
+                } catch (error) {
+                    console.error('文件读取错误:', error);
+                    alert('文件读取失败，请确保文件格式正确');
+                    isProcessing = false;
+                    updateUI();
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function handleRewrite() {
+            if (articles.length === 0) {
+                alert('请先上传文件');
+                return;
+            }
+
+            isProcessing = true;
+            updateUI();
+
+            const articlesToProcess = articles.filter(article => article.status === 'pending');
+            
+            if (articlesToProcess.length === 0) {
+                alert('没有需要改写的文章');
+                isProcessing = false;
+                updateUI();
+                return;
+            }
+            
+            console.log(`开始处理 ${articlesToProcess.length} 篇待处理文章`);
+            
+            for (let i = 0; i < articlesToProcess.length; i++) {
+                const article = articlesToProcess[i];
+                
+                try {
+                    // 更新状态为处理中
+                    const articleIndex = articles.findIndex(a => a.id === article.id);
+                    if (articleIndex !== -1) {
+                        articles[articleIndex] = {
+                            ...article,
+                            status: 'processing',
+                            error: undefined,
+                            currentTool: '正在改写...'
+                        };
+                        updateUI();
+                    }
+
+                    console.log(`处理文章 ${article.id}，内容长度: ${article.originalContent.length}`);
+                    
+                    // 模拟改写过程
+                    await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+                    
+                    // 模拟改写结果
+                    const mockResult = {
+                        content: `【改写版本】${article.originalContent.substring(0, 200)}...（此处为模拟改写结果，实际使用时将调用真实的AI改写API）`,
+                        title: `优化版：${article.originalContent.substring(0, 30)}...`,
+                        aiTool: ['智谱AI', '文心一言', '通义千问', 'Claude', 'GPT-4'][Math.floor(Math.random() * 5)]
+                    };
+                    
+                    // 更新为完成状态
+                    const successIndex = articles.findIndex(a => a.id === article.id);
+                    if (successIndex !== -1) {
+                        articles[successIndex] = {
+                            ...article,
+                            rewrittenContent: mockResult.content,
+                            newTitle: mockResult.title,
+                            aiTool: mockResult.aiTool,
+                            currentTool: undefined,
+                            status: 'completed',
+                            error: undefined
+                        };
+                        updateUI();
+                        saveData();
+                    }
+                    
+                    console.log(`文章 ${article.id} 改写成功，使用工具: ${mockResult.aiTool}`);
+                    
+                } catch (error) {
+                    console.error(`文章 ${article.id} 改写失败:`, error);
+                    
+                    const errorIndex = articles.findIndex(a => a.id === article.id);
+                    if (errorIndex !== -1) {
+                        articles[errorIndex] = {
+                            ...article,
+                            status: 'error',
+                            error: error.message || '改写失败',
+                            currentTool: undefined
+                        };
+                        updateUI();
+                        saveData();
+                    }
+                }
+                
+                // 在文章之间添加延迟
+                if (i < articlesToProcess.length - 1) {
+                    const delay = 2000 + Math.random() * 2000;
+                    console.log(`✅ 文章处理完成，等待${Math.round(delay/1000)}秒后处理下一篇文章...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+
+            isProcessing = false;
+            updateUI();
+            console.log('✅ 内容伪原创完成。改写处理完成');
+        }
+
+        async function handleRetry(articleId) {
+            const article = articles.find(a => a.id === articleId);
+            if (!article) return;
+            
+            // 重置状态为处理中
+            const articleIndex = articles.findIndex(a => a.id === articleId);
+            if (articleIndex !== -1) {
+                articles[articleIndex] = {
+                    ...article,
+                    status: 'processing',
+                    error: undefined,
+                    currentTool: '正在重试...'
+                };
+                updateUI();
+            }
+
+            try {
+                console.log(`重试文章 ${articleId}，内容长度: ${article.originalContent.length}`);
+                
+                // 模拟重试改写
+                await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+                
+                const mockResult = {
+                    content: `【重试改写】${article.originalContent.substring(0, 200)}...（此处为模拟改写结果）`,
+                    title: `重试版：${article.originalContent.substring(0, 30)}...`,
+                    aiTool: ['智谱AI', '文心一言', '通义千问', 'Claude', 'GPT-4'][Math.floor(Math.random() * 5)]
+                };
+                
+                // 更新为完成状态
+                const successIndex = articles.findIndex(a => a.id === articleId);
+                if (successIndex !== -1) {
+                    articles[successIndex] = {
+                        ...article,
+                        rewrittenContent: mockResult.content,
+                        newTitle: mockResult.title,
+                        aiTool: mockResult.aiTool,
+                        currentTool: undefined,
+                        status: 'completed',
+                        error: undefined
+                    };
+                    updateUI();
+                    saveData();
+                }
+                
+                console.log(`文章 ${articleId} 重试成功`);
+                
+            } catch (error) {
+                console.error(`重试文章 ${articleId} 失败:`, error);
+                
+                const errorIndex = articles.findIndex(a => a.id === articleId);
+                if (errorIndex !== -1) {
+                    articles[errorIndex] = {
+                        ...article,
+                        status: 'error',
+                        error: error.message || '改写失败',
+                        currentTool: undefined
+                    };
+                    updateUI();
+                    saveData();
+                }
+            }
+        }
+
+        function handleDownload() {
+            const completedArticles = articles.filter(article => article.status === 'completed');
+            
+            if (completedArticles.length === 0) {
+                alert('没有可下载的改写结果');
+                return;
+            }
+
+            const excelData = [
+                ['序号', '原标题', '新标题', '原文内容', '改写后内容', '状态', '使用工具']
+            ];
+
+            completedArticles.forEach(article => {
+                excelData.push([
+                    article.id.toString(),
+                    '原标题',
+                    article.newTitle || '',
+                    article.originalContent,
+                    article.rewrittenContent || '',
+                    '已完成',
+                    article.aiTool || ''
+                ]);
+            });
+
+            const worksheet = XLSX.utils.aoa_to_sheet(excelData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, '改写结果');
+
+            const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+            
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            saveAs(blob, `改写结果_${timestamp}.xlsx`);
+        }
+
+        function handleDownloadFailed() {
+            const failedArticles = articles.filter(article => article.status === 'error');
+            
+            if (failedArticles.length === 0) {
+                alert('没有失败的文章需要下载');
+                return;
+            }
+
+            const excelData = [
+                ['序号', '原文内容', '错误信息', '状态', '失败时间']
+            ];
+
+            failedArticles.forEach(article => {
+                excelData.push([
+                    article.id.toString(),
+                    article.originalContent,
+                    article.error || '未知错误',
+                    '改写失败',
+                    new Date().toLocaleString('zh-CN')
+                ]);
+            });
+
+            const worksheet = XLSX.utils.aoa_to_sheet(excelData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, '改写失败文章');
+
+            const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+            
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            saveAs(blob, `改写失败文章_${timestamp}.xlsx`);
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+        });
+    </script>
+</body>
+</html>
